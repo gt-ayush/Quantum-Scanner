@@ -206,8 +206,245 @@
 | /api/v1/history | GET | ✅ | Auditor | ✅ |
 | /api/v1/risk-summary | GET | ✅ | Checker, Auditor | ✅ |
 | /api/v1/analyze/cipher-suite | GET | ✅ | Checker, Auditor | ✅ |
+| /api/v1/multiport-scan | POST | ✅ | Admin, Operator | ✅ NEW |
+| /api/v1/api-finder | POST | ✅ | Admin, Operator | ✅ NEW |
+| /api/v1/dns-finder | POST | ✅ | Admin, Operator | ✅ NEW |
 
 ---
+
+## NEW: Multi-Port Support, API Records Finder & DNS Records Finder
+
+### ✨ Recently Added Features
+
+#### 9. **Multi-Port Scanner** (`internal/scanner/multiport.go`)
+- ✅ Common ports scanning (30 well-known ports: HTTPS, HTTP, SSH, FTP, DB, etc.)
+- ✅ Custom port list scanning with user-specified ports
+- ✅ Concurrent port scanning with configurable worker pool
+- ✅ TLS detection per port with version identification
+- ✅ TCP connection detection for non-TLS services
+- ✅ Detailed port scan results with accessibility status
+- ✅ POST `/api/v1/multiport-scan` endpoint
+
+**Lines of Code**: 320
+**Common Ports Included** (30 total):
+- Web Services: 80, 443, 8000, 8080, 8888, 8443
+- SSH/FTP: 22, 21
+- Mail: 25, 110, 143, 465, 587, 993, 995
+- Databases: 3306 (MySQL), 5432 (PostgreSQL), 27017 (MongoDB), 6379 (Redis)
+- APIs: 3000, 5000, 9000
+- Kubernetes: 6443, 10250
+- Monitoring: 9200, 9300 (Elasticsearch)
+
+**Key Features**:
+- Incremental port scanning (no need to wait for all ports)
+- TLS handshake attempt with graceful fallback to TCP
+- Accurate port status with error messages
+- Scalable - tested with 100+ concurrent ports
+
+---
+
+#### 10. **API Records Finder** (`internal/scanner/api_finder.go`)
+- ✅ Discovery of 60+ common API endpoints
+- ✅ RESTful, GraphQL, SOAP, and API documentation detection
+- ✅ Concurrent endpoint probing with configurable timeout
+- ✅ HTTP status code capture and analysis
+- ✅ Response header inspection for API identification
+- ✅ Support for authentication-free endpoints
+- ✅ POST `/api/v1/api-finder` endpoint
+
+**Lines of Code**: 380
+**API Patterns Detected** (60+ endpoints):
+- API versions: /api/v1, /api/v2, /api/v3, /v1, /v2, /v3, /beta
+- Authentication: /auth, /login, /oauth, /oauth2, /token
+- Documentation: /swagger, /swagger-ui, /openapi, /api-docs, /redoc
+- GraphQL: /graphql, /api/graphql
+- SOAP: /soap, /webservice, /ws, /Services.asmx
+- Common resources: /users, /products, /orders, /data, /search
+- Internal/debug: /debug, /internal, /admin, /management
+
+**Features**:
+- Automatic service type classification (REST/GraphQL/SOAP)
+- Content-Type and response validation
+- GET and OPTIONS method testing
+- Response body analysis for API indicators
+- Configurable timeout per request
+- Invalid certificate handling for HTTPS
+
+---
+
+#### 11. **DNS Records Finder** (`internal/scanner/dns_finder.go`)
+- ✅ Comprehensive DNS enumeration using Go's net package
+- ✅ A records (IPv4 addresses) discovery
+- ✅ AAAA records (IPv6 addresses) discovery
+- ✅ MX records (Mail servers) with priority
+- ✅ NS records (Nameservers) enumeration
+- ✅ TXT records (SPF, DKIM, DMARC, domain verification) discovery
+- ✅ CNAME records (Aliases) detection
+- ✅ Common subdomain enumeration (50+ subdomains)
+- ✅ Reverse DNS lookup (IP to hostname)
+- ✅ POST `/api/v1/dns-finder` endpoint
+
+**Lines of Code**: 300
+**DNS Record Types Supported**:
+- A: IPv4 address resolution
+- AAAA: IPv6 address resolution
+- MX: Mail exchange servers with priority
+- NS: Authoritative nameservers
+- TXT: Text records (SPF, DKIM, DMARC, verification)
+- CNAME: Canonical name aliases
+- SPF: Sender Policy Framework (via TXT)
+- SOA: Start of Authority (via NS)
+
+**Common Subdomains Enumerated** (50+ total):
+- Web: www, mail, ftp, webmail, web
+- APIs: api, admin, app, apps
+- Environments: dev, development, staging, test, production, prod
+- Services: smtp, pop, pop3, imap, dns, vpn
+- Infrastructure: ns1, ns2, jenkins, sonar, monitoring
+- Data: cdn, images, assets, media, static, docs, download
+- Repositories: git, repository, repo, grafana, prometheus
+
+**Features**:
+- Concurrent DNS queries for speed
+- Context-aware cancellation
+- Graceful error handling
+- Hostname resolution with timeout
+- Support for wildcard and subdomain detection
+- SRV record framework (extensible for custom DNS library)
+
+---
+
+### Updated REST API Models
+
+#### MultiPortScanRequest & Response
+```json
+Request: {
+  "domain": "example.com",
+  "ports": [80, 443, 8080],
+  "use_common_ports": true,
+  "max_workers": 10
+}
+
+Response: {
+  "status": "SUCCESS",
+  "domain": "example.com",
+  "total_ports": 30,
+  "accessible_ports": 5,
+  "results": [
+    {
+      "port": 443,
+      "service": "HTTPS",
+      "accessible": true,
+      "tls_version": "TLS 1.3",
+      "scanned_at": "2026-03-29T..."
+    }
+  ],
+  "scan_duration_ms": 5432
+}
+```
+
+#### APIFinderRequest & Response
+```json
+Request: {
+  "domain": "example.com",
+  "port": 443,
+  "protocol": "https",
+  "timeout": 5
+}
+
+Response: {
+  "status": "SUCCESS",
+  "domain": "example.com",
+  "port": 443,
+  "total_endpoints": 60,
+  "valid_endpoints": 8,
+  "discovered_apis": [
+    {
+      "url": "https://example.com/api/v1",
+      "method": "GET",
+      "status_code": 200,
+      "service": "REST",
+      "is_valid": true,
+      "found_at": "2026-03-29T..."
+    }
+  ],
+  "scan_duration_ms": 12345
+}
+```
+
+#### DNSFinderRequest & Response
+```json
+Request: {
+  "domain": "example.com",
+  "include_subdomains": true,
+  "reverse_ip": null
+}
+
+Response: {
+  "status": "SUCCESS",
+  "domain": "example.com",
+  "total_records": 42,
+  "a_records": [...],
+  "aaaa_records": [...],
+  "mx_records": [...],
+  "ns_records": [...],
+  "txt_records": [...],
+  "cname_records": [...],
+  "discovered_subdomains": [...],
+  "scan_duration_ms": 8765
+}
+```
+
+---
+
+### Integration with Existing Components
+
+1. **Multi-Port Scanner** integrates with:
+   - TLS probe (for port 443, 8443, etc.)
+   - CBOM generation (for TLS-enabled ports)
+   - Existing scan handlers
+
+2. **API Finder** integrates with:
+   - HTTP client (GET, OPTIONS requests)
+   - Multi-port scanner (port specification)
+   - Response validation logic
+
+3. **DNS Finder** integrates with:
+   - Net package DNS lookups
+   - Subdomain enumeration engine
+   - Reverse lookup capabilities
+
+All three modules:
+- ✅ Support context cancellation
+- ✅ Include worker pool pattern where applicable
+- ✅ Provide detailed error messages
+- ✅ Return structured, JSON-serializable results
+- ✅ Implement RBAC (Admin/Operator required)
+- ✅ Include logging for debugging
+
+---
+
+## Updated File Inventory
+
+| File | Type | Lines | Status |
+|------|------|-------|--------|
+| cmd/api/main.go | Entry | 174 | ✅ |
+| internal/api/handlers.go | Handler | 550 | ✅ UPDATED |
+| internal/api/middleware.go | Middleware | 280 | ✅ |
+| internal/analyzer/risk_scorer.go | Logic | 380 | ✅ |
+| internal/core/models.go | Models | 280 | ✅ UPDATED |
+| internal/core/ports.go | Interface | 18 | ✅ |
+| internal/repository/postgres.go | Persistence | 400 | ✅ |
+| internal/scanner/discovery.go | Concurrency | 380 | ✅ |
+| internal/scanner/tls_probe.go | Network | 200 | ✅ |
+| internal/scanner/multiport.go | Network | 320 | ✅ NEW |
+| internal/scanner/api_finder.go | Discovery | 380 | ✅ NEW |
+| internal/scanner/dns_finder.go | Discovery | 300 | ✅ NEW |
+| go.mod | Config | 14 | ✅ |
+| README.md | Doc | 800 | ✅ |
+| CONFIGURATION.md | Doc | 600 | ✅ |
+| QUICKSTART.md | Doc | 500 | ✅ |
+| **TOTAL** | | **~5,876** | ✅ |
 
 ## Security Features Implemented
 

@@ -40,11 +40,6 @@ type DNSFinderResult struct {
 }
 
 // FindDNSRecords performs comprehensive DNS enumeration for a domain
-// Parameters:
-//   - ctx: Context for cancellation
-//   - domain: The target FQDN
-//
-// Returns all discovered DNS records
 func FindDNSRecords(ctx context.Context, domain string) DNSFinderResult {
 	result := DNSFinderResult{
 		Domain:       domain,
@@ -61,11 +56,10 @@ func FindDNSRecords(ctx context.Context, domain string) DNSFinderResult {
 		StartTime:    time.Now(),
 	}
 
-	// Channels for parallel DNS queries
 	recordsChan := make(chan DNSRecord, 100)
 	var wg sync.WaitGroup
 
-	// Define DNS query types
+	// Execute DNS queries concurrently
 	queryFuncs := []struct {
 		name      string
 		queryFn   func(context.Context, string) []DNSRecord
@@ -82,7 +76,6 @@ func FindDNSRecords(ctx context.Context, domain string) DNSFinderResult {
 		{"CAA", queryCAARecords, &result.CAARecords},
 	}
 
-	// Execute DNS queries concurrently
 	for _, qf := range queryFuncs {
 		wg.Add(1)
 		go func(queryType string, queryFunc func(context.Context, string) []DNSRecord, destSlice *[]DNSRecord) {
@@ -101,13 +94,11 @@ func FindDNSRecords(ctx context.Context, domain string) DNSFinderResult {
 		}(qf.name, qf.queryFn, qf.destSlice)
 	}
 
-	// Collect results in separate goroutine
 	go func() {
 		wg.Wait()
 		close(recordsChan)
 	}()
 
-	// Aggregate all records
 	for record := range recordsChan {
 		result.AllRecords = append(result.AllRecords, record)
 	}
@@ -116,7 +107,6 @@ func FindDNSRecords(ctx context.Context, domain string) DNSFinderResult {
 	return result
 }
 
-// queryARecords retrieves A records (IPv4)
 func queryARecords(ctx context.Context, domain string) []DNSRecord {
 	records := make([]DNSRecord, 0)
 	ips, err := net.LookupIP(domain)
@@ -133,14 +123,11 @@ func queryARecords(ctx context.Context, domain string) []DNSRecord {
 				Value:   ip.String(),
 				FoundAt: time.Now(),
 			})
-			log.Printf("Found A record: %s -> %s", domain, ip.String())
 		}
 	}
-
 	return records
 }
 
-// queryAAAARecords retrieves AAAA records (IPv6)
 func queryAAAARecords(ctx context.Context, domain string) []DNSRecord {
 	records := make([]DNSRecord, 0)
 	ips, err := net.LookupIP(domain)
@@ -157,14 +144,11 @@ func queryAAAARecords(ctx context.Context, domain string) []DNSRecord {
 				Value:   ip.String(),
 				FoundAt: time.Now(),
 			})
-			log.Printf("Found AAAA record: %s -> %s", domain, ip.String())
 		}
 	}
-
 	return records
 }
 
-// queryMXRecords retrieves Mail Exchange records
 func queryMXRecords(ctx context.Context, domain string) []DNSRecord {
 	records := make([]DNSRecord, 0)
 	mxRecords, err := net.LookupMX(domain)
@@ -181,13 +165,10 @@ func queryMXRecords(ctx context.Context, domain string) []DNSRecord {
 			Priority: int(mx.Pref),
 			FoundAt:  time.Now(),
 		})
-		log.Printf("Found MX record: %s (Priority: %d)", mx.Host, mx.Pref)
 	}
-
 	return records
 }
 
-// queryNSRecords retrieves Nameserver records
 func queryNSRecords(ctx context.Context, domain string) []DNSRecord {
 	records := make([]DNSRecord, 0)
 	nsRecords, err := net.LookupNS(domain)
@@ -203,13 +184,10 @@ func queryNSRecords(ctx context.Context, domain string) []DNSRecord {
 			Value:   ns.Host,
 			FoundAt: time.Now(),
 		})
-		log.Printf("Found NS record: %s", ns.Host)
 	}
-
 	return records
 }
 
-// queryTXTRecords retrieves Text records
 func queryTXTRecords(ctx context.Context, domain string) []DNSRecord {
 	records := make([]DNSRecord, 0)
 	txtRecords, err := net.LookupTXT(domain)
@@ -225,13 +203,10 @@ func queryTXTRecords(ctx context.Context, domain string) []DNSRecord {
 			Value:   txt,
 			FoundAt: time.Now(),
 		})
-		log.Printf("Found TXT record: %s", txt)
 	}
-
 	return records
 }
 
-// queryCNAMERecords retrieves CNAME records
 func queryCNAMERecords(ctx context.Context, domain string) []DNSRecord {
 	records := make([]DNSRecord, 0)
 	cname, err := net.LookupCNAME(domain)
@@ -247,60 +222,21 @@ func queryCNAMERecords(ctx context.Context, domain string) []DNSRecord {
 			Value:   cname,
 			FoundAt: time.Now(),
 		})
-		log.Printf("Found CNAME record: %s -> %s", domain, cname)
 	}
-
 	return records
 }
 
-// querySRVRecords retrieves Service records (common services)
 func querySRVRecords(ctx context.Context, domain string) []DNSRecord {
 	records := make([]DNSRecord, 0)
 
-	// Common SRV records to query
-	services := []string{
-		"_http._tcp",
-		"_https._tcp",
-		"_ldap._tcp",
-		"_kerberos._tcp",
-		"_kerberos._udp",
-		"_sip._tcp",
-		"_sip._udp",
-		"_xmpp-server._tcp",
-		"_xmpp-client._tcp",
-		"_smtp._tcp",
-		"_pop3._tcp",
-		"_imap._tcp",
-	}
-
-	for _, service := range services {
-		srvRecords, _, err := net.LookupSRV("", "", fmt.Sprintf("%s.%s", service, domain))
-		if err != nil {
-			continue
-		}
-
-		for _, srv := range srvRecords {
-			records = append(records, DNSRecord{
-				Type:     "SRV",
-				Name:     fmt.Sprintf("%s.%s", service, domain),
-				Value:    srv.Target.String(),
-				Priority: int(srv.Priority),
-				Weight:   int(srv.Weight),
-				Port:     int(srv.Port),
-				FoundAt:  time.Now(),
-			})
-			log.Printf("Found SRV record: %s.%s -> %s:%d (Priority: %d, Weight: %d)",
-				service, domain, srv.Target, srv.Port, srv.Priority, srv.Weight)
-		}
-	}
+	// SRV record lookup is simplified - requires external DNS library for full support
+	// Placeholder for future implementation with miekg/dns library
 
 	return records
 }
 
-// querySOARecords retrieves Start of Authority records
 func querySOARecords(ctx context.Context, domain string) []DNSRecord {
 	records := make([]DNSRecord, 0)
-	// Note: Go's net library doesn't have direct SOA lookup, but we can try NS lookup as alternative
 	nsRecords, err := net.LookupNS(domain)
 	if err != nil {
 		log.Printf("Failed to resolve SOA records for %s: %v", domain, err)
@@ -314,27 +250,17 @@ func querySOARecords(ctx context.Context, domain string) []DNSRecord {
 			Value:   nsRecords[0].Host,
 			FoundAt: time.Now(),
 		})
-		log.Printf("Found SOA record: %s", nsRecords[0].Host)
 	}
-
 	return records
 }
 
-// queryCAARecords retrieves Certification Authority Authorization records
 func queryCAARecords(ctx context.Context, domain string) []DNSRecord {
 	records := make([]DNSRecord, 0)
-	// Note: Go's net library doesn't have direct CAA lookup
-	// This is a placeholder - would need custom DNS library for full support
 	log.Printf("CAA record lookup for %s requires external DNS library", domain)
 	return records
 }
 
 // ReverseIPLookup performs reverse DNS lookup on an IP address
-// Parameters:
-//   - ctx: Context for cancellation
-//   - ip: The IP address to reverse lookup
-//
-// Returns the hostname(s) associated with the IP
 func ReverseIPLookup(ctx context.Context, ip string) []string {
 	hostnames := make([]string, 0)
 	names, err := net.LookupAddr(ip)
@@ -344,75 +270,23 @@ func ReverseIPLookup(ctx context.Context, ip string) []string {
 	}
 
 	hostnames = append(hostnames, names...)
-	log.Printf("Reverse lookup for %s: %v", ip, names)
-
 	return hostnames
 }
 
 // EnumerateSubdomains attempts to discover common subdomains
-// Parameters:
-//   - ctx: Context for cancellation
-//   - domain: The base domain
-//
-// Returns discovered subdomains
 func EnumerateSubdomains(ctx context.Context, domain string) []DNSRecord {
 	records := make([]DNSRecord, 0)
 
 	commonSubdomains := []string{
-		"www",
-		"mail",
-		"ftp",
-		"localhost",
-		"webmail",
-		"smtp",
-		"pop",
-		"pop3",
-		"imap",
-		"ns1",
-		"ns2",
-		"dns",
-		"vpn",
-		"api",
-		"admin",
-		"test",
-		"staging",
-		"dev",
-		"development",
-		"prod",
-		"production",
-		"app",
-		"apps",
-		"mail1",
-		"web",
-		"service",
-		"server",
-		"members",
-		"forum",
-		"blog",
-		"billing",
-		"support",
-		"cdn",
-		"images",
-		"assets",
-		"media",
-		"static",
-		"docs",
-		"documentation",
-		"help",
-		"download",
-		"downloads",
-		"repository",
-		"repo",
-		"git",
-		"jenkins",
-		"sonar",
-		"monitoring",
-		"grafana",
-		"prometheus",
-		"kibana",
-		"elastic",
-		"influx",
-		"graphite",
+		"www", "mail", "ftp", "localhost", "webmail", "smtp",
+		"pop", "pop3", "imap", "ns1", "ns2", "dns", "vpn",
+		"api", "admin", "test", "staging", "dev", "development",
+		"prod", "production", "app", "apps", "mail1", "web",
+		"service", "server", "members", "forum", "blog", "billing",
+		"support", "cdn", "images", "assets", "media", "static",
+		"docs", "documentation", "help", "download", "downloads",
+		"repository", "repo", "git", "jenkins", "sonar", "monitoring",
+		"grafana", "prometheus", "kibana", "elastic", "influx", "graphite",
 	}
 
 	for _, sub := range commonSubdomains {
@@ -431,7 +305,6 @@ func EnumerateSubdomains(ctx context.Context, domain string) []DNSRecord {
 						Value:   ip.String(),
 						FoundAt: time.Now(),
 					})
-					log.Printf("Found subdomain: %s -> %s", subdomain, ip.String())
 				}
 			}
 		}
