@@ -1,0 +1,113 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: quantum-sentinel-db
+    environment:
+      POSTGRES_DB: quantum_sentinel
+      POSTGRES_USER: quantum_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-quantum_password_change_me}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quantum_user -d quantum_sentinel"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - quantum-network
+    restart: unless-stopped
+
+  # Quantum Sentinel API Server
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: quantum-sentinel-api
+    environment:
+      DB_CONNECTION_URL: "postgresql://quantum_user:${DB_PASSWORD:-quantum_password_change_me}@db:5432/quantum_sentinel"
+      JWT_SECRET: ${JWT_SECRET:-your-super-secure-jwt-secret-change-this-in-production}
+      SERVER_HOST: "0.0.0.0"
+      SERVER_PORT: "8080"
+    ports:
+      - "${API_PORT:-8080}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - quantum-network
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    read_only_root_filesystem: true
+    tmpfs:
+      - /tmp
+
+  # Optional: pgAdmin for database management (development only)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: quantum-sentinel-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin_change_me}
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+    networks:
+      - quantum-network
+    profiles:
+      - dev
+    restart: unless-stopped
+
+  # Optional: Nginx reverse proxy (production-like)
+  nginx:
+    image: nginx:alpine
+    container_name: quantum-sentinel-nginx
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    depends_on:
+      - api
+    networks:
+      - quantum-network
+    profiles:
+      - prod
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  quantum-network:
+    driver: bridge
+
+# Usage:
+# Development (with pgAdmin):
+#   docker-compose --profile dev up -d
+#
+# Production (with Nginx):
+#   docker-compose --profile prod up -d
+#
+# Standard (API + Database):
+#   docker-compose up -d
+#
+# Environment variables:
+#   DB_PASSWORD - PostgreSQL password (default: quantum_password_change_me)
+#   JWT_SECRET - JWT signing secret (default: your-super-secure...)
+#   API_PORT - API server port (default: 8080)
+#   PGADMIN_PASSWORD - pgAdmin password (default: admin_change_me)
