@@ -1,0 +1,61 @@
+# Quantum Sentinel AI - .gitignore
+
+# Binaries
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+*.o
+
+# Build artifacts
+*.a
+*.out
+
+# Go
+vendor/
+.mod
+.sum
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.iml
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sql
+data/
+
+# Testing
+coverage.out
+coverage.html
+*.test
+
+# Temporary
+tmp/
+temp/
+.tmp/
+
+# Certificates (don't commit private keys!)
+*.key
+*.crt
+*.pem
+!example.crt
+
+# Local development
+docker-compose.override.yml
+local.env
