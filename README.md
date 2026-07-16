@@ -1,1 +1,1 @@
-# PNB-Quantum-Scanner
+# Quantum-Scanner
